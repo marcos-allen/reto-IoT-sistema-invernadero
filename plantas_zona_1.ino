@@ -1,5 +1,14 @@
-#include <DHT.h>                     // Library required for DHT11 sensor
-#include <PubSubClient.h>            // Library required for MQTT
+// Reto: Sistema de IoT para gestion, monitoreo y control de un invernadero 
+
+/* Codigo fuente del sistema de sensado de la zona 1
+Elaborado por:
+Marcos Allen Martínez Cortés
+Sebastián Hernández Guevara
+Karol Anette Lozano González
+Edwin Emmanuel Salazar Meza */
+
+#include <DHT.h>                     // Libreria para el sensor DHT11 (humedad y temperatura)
+#include <PubSubClient.h>            // Libreria para gestionar la conexion MQTT
 
 // Set up the particular type of sensor used (DHT11, DHT21, DHT22, ...) attached to esp32 board.
 #define DHTPIN 14             // Digital esp32 pin to receive data from DHT.
@@ -11,44 +20,36 @@ float t;
 float h;
 
 // Credentials to connect to your WiFi Network.
-// Strongly related to your working envirnonment
-
+// Credenciales para conectarse a la red WiFi
 const char* ssid = ""; 
 const char* password = "";
 
-// MQTT broker server. Note that the specific port is defined depending on the type of the
-// used connection.
+// Servidor MQTT de ThingSpeak
 const char* server = "mqtt3.thingspeak.com";
 
-// A macro is used to select between secure and nonsecure connection as it is hardware-dependent
-// Certain IoT hardware platforms do not work with the WiFiClientSecure library.
-
-//#define USESECUREMQTT             // Comment this line if nonsecure connection is used
-
+// Definicion de la conexion segura o no segura
+// En algunos casos, ciertos dispositivos IoT no soportan la conexion segura
+//#define USESECUREMQTT             // Descomentar esta linea si se utiliza conexion segura
 #ifdef USESECUREMQTT
-  #include <WiFiClientSecure.h>
-  #define mqttPort 8883
-  WiFiClientSecure client; 
+  #include <WiFiClientSecure.h>   // Si se usa conexión segura, se incluye la librería de WiFi seguro
+  #define mqttPort 8883           // Puerto para conexión segura
+  WiFiClientSecure client;       // Cliente para la conexión segura
 #else
-  #include <WiFi.h>
-  #define mqttPort 1883
-  WiFiClient client;
+  #include <WiFiS3.h>            // Si no se usa conexión segura, se usa esta librería
+  #define mqttPort 1883           // Puerto para conexión no segura
+  WiFiClient client;            // Cliente para la conexión no segura
 #endif
 
-// Credentials that allow to publish and subscribe to the ThingSpeak channel. It depends on your
-// ThinkSpeak account and the defined channels
+// Credenciales para publicar y suscribirse en el canal de ThingSpeak
 const char mqttUserName[]   = ""; 
 const char clientID[]       = "";
 const char mqttPass[]       = "";
 
-// Channel ID that is defined in the ThinkSpeak account tp hold out streaming data. Recall that
-// up to eigth fields are allowed per channel
-#define channelID 2727382                     // This channel holds two fields: temperature and humidity
+// ID del canal en ThingSpeak
+#define channelID 2727382
 
-
-// Since the target esp32-based board support secure connections, a thingspeak certificate is used.
-
-  const char * PROGMEM thingspeak_ca_cert = \
+// Certificado para conexion segura (para dispositivos como el ESP32)
+const char * PROGMEM thingspeak_ca_cert = \
   "-----BEGIN CERTIFICATE-----\n" \
   "MIIDxTCCAq2gAwIBAgIQAqxcJmoLQJuPC3nyrkYldzANBgkqhkiG9w0BAQUFADBs\n" \
   "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
@@ -73,180 +74,173 @@ const char mqttPass[]       = "";
   "+OkuE6N36B9K\n" \
   "-----END CERTIFICATE-----\n";
 
-
-// Initial state of the wifi connection
+// Estado inicial de la conexion WiFi
 int status = WL_IDLE_STATUS; 
 
-// The MQTT client is liked to the wifi connection
+// El cliente MQTT esta vinculado a la conexion WiFi
 PubSubClient mqttClient( client );
 
-// Variables are defined to control the timing of connections and to define the
-// update rate of sensor readings (in milliseconds)
+// Variables para controlar la sincronizacion de las conexiones y la frecuencia de lectura de sensores (en milisegundos)
+int connectionDelay    = 4;    // Retraso (s) entre intentos de conexión WiFi
+long lastPublishMillis = 0;    // Para almacenar el valor de la ultima llamada de la funcion millis()
+int updateInterval     = 15;   // Los valores del sensor se publican cada 15 segundos
 
-int connectionDelay    = 4;    // Delay (s) between trials to connect to WiFi
-long lastPublishMillis = 0;    // To hold the value of last call of the millis() function
-int updateInterval     = 15;   // Sensor readings are published every 15 seconds o so.
+/* Prototipos de funciones agrupadas por funcionalidad y dependencias */
 
-
-/***
-* Function prototypes mainly grouped by funcionality and dependency
-**/
-
-// Function to connect to WiFi.
+// Funcion para conectar al Wi-Fi
 void connectWifi();
 
-// Function to connect to MQTT server, i.e., mqtt3.thingspeak.com
+// Funcion para conectar al servidor MQTT (mqtt3.thingspeak.com)
 void mqttConnect();
 
-// Function to subscribe to ThingSpeak channel for updates.
+// Funcion para suscribirse al canal de ThingSpeak para recibir actualizaciones
 void mqttSubscribe( long subChannelID );
 
-// Function to handle messages from MQTT subscription to the ThingSpeak broker.
+// Funcion para manejar los mensajes de la suscripcion MQTT al servidor de ThingSpeak
 void mqttSubscriptionCallback( char* topic, byte* payload, unsigned int length );
 
-// Function to publish messages to a ThingSpeak channel.
+// Funcion para publicar mensajes en el canal de ThingSpeak
 void mqttPublish(long pubChannelID, String message);
 
 
 void setup() {
-  // Recall that this code is executed only once.
-  // Establish the serial transmission rate and set up the communication
+  // Este codigo solo se ejecuta una vez al inicio.
+  // Establece la tasa de transmision serial y configura la comunicacion
   Serial.begin( 115200 );
-  // Some delay to allow serial set up.
+
+  // Un pequeño retraso para permitir que se establezca la comunicacion serial.
   delay(3000);
 
-  dht.begin();                   // Initialize DHT11 sensor          
+  // Inicializa el sensor DHT11
+  dht.begin();          
 
-  // Connect to the specified Wi-Fi network.
-  connectWifi();
+  // Conexion a la red Wi-Fi
+  connectWifi();   // Conecta el dispositivo a la red Wi-Fi
+
+  // Configuracion del cliente MQTT para conectarse con el broker ThingSpeak
+  mqttClient.setServer( server, mqttPort );  // Configura el servidor MQTT y el puerto
+  mqttClient.setCallback( mqttSubscriptionCallback );  // Establece la funcion de callback para mensajes MQTT
+  mqttClient.setBufferSize( 2048 );  // Establece el tamaño del buffer para mensajes MQTT
   
-  // Configure the MQTT client to connect with ThinkSpeak broker
-  mqttClient.setServer( server, mqttPort ); 
-  
-  // Set the MQTT message handler function.
-  mqttClient.setCallback( mqttSubscriptionCallback );
-  // Set the buffer to handle the returned JSON. 
-  // NOTE: A buffer overflow of the message buffer will result in your callback not being invoked.
-  mqttClient.setBufferSize( 2048 );
-  
-  // Use secure MQTT connections if defined.
+  // Conexion segura MQTT (si esta habilitada)
   #ifdef USESECUREMQTT
-    // Handle functionality differences of WiFiClientSecure library for different boards.
-    // Herein we are dealing with esp32-based IoT boards.
-      client.setCACert(thingspeak_ca_cert);
+    client.setCACert(thingspeak_ca_cert);  // Establece el certificado CA de ThinkSpeak para conexion segura
   #endif
 }
 
 void loop() {
-  // After everythins is set up, go the perception-action loop
-  // Reconnect to WiFi if it gets disconnected.
+  // Despues de que todo esta configurado, se entra al ciclo de percepcion-accion
+  // Reintentar la conexion a WiFi si se ha perdido la conexion
   if (WiFi.status() != WL_CONNECTED) {
-      connectWifi();
+      connectWifi();  // Reconectar WiFi si la conexion no esta activa
   }
   
-  // Connect if MQTT client is not connected and resubscribe to channel updates.
-  // ThinkSpeak broaker server : suscribe to the specified channel
+  // Si el cliente MQTT no esta conectado, intentamos conectar de nuevo
   if (!mqttClient.connected()) {
-     mqttConnect(); 
-     mqttSubscribe( channelID );
+     mqttConnect(); // Reconectar MQTT
+     mqttSubscribe( channelID ); // Suscribirse al canal de ThingSpeak
   }
   
-  // Call the loop to maintain connection to the server.
-  mqttClient.loop(); 
+  // Mantener la conexion con el servidor MQTT mediante la llamada al loop()
+  mqttClient.loop();
   
-  // Update ThingSpeak channel periodically according to the specified rate. 
-  // The update results in the message to the subscriber.
+  // Actualizar el canal de ThingSpeak cada vez que pase el intervalo de actualizacion
+  // El resultado de esta actualizacion sera el mensaje enviado al suscriptor
   if ( (millis() - lastPublishMillis) > updateInterval*1000) {
-    // Sensors readings: temperature and humidity
-    t = dht.readTemperature();
-    h = dht.readHumidity();
-    float ht = 4095 - analogRead(35);
-
+    // Lecturas de los sensores: temperatura y humedad
+    t = dht.readTemperature();  // Lee la temperatura
+    h = dht.readHumidity();     // Lee la humedad
+    float ht = 4095 - analogRead(35);  // Lee la humedad del suelo
+    
+    // Verifica si la lectura de temperatura o humedad es invalida
     if ( isnan(t) || isnan(h)) {
-        Serial.println("Failed to read from DHT sensor!");
-      }
-      Serial.print(F("Local temperature: "));
-      Serial.print(t);
-      Serial.print(" ºC ");
-      Serial.print(F("  Local humidity: "));
-      Serial.print(h); 
-      Serial.println(" %");
-      Serial.print("Humedad en tierra es: ");
-      Serial.println(ht);
+        Serial.println("¡Fallos al leer del sensor DHT!");  // Muestra mensaje de error si falla la lectura
+    }
+    
+    // Muestra la temperatura local en el monitor serial
+    Serial.print(F("Temperatura local: "));
+    Serial.print(t);
+    Serial.print(" ºC ");
+    // Muestra la humedad local en el monitor serial
+    Serial.print(F("  Humedad local: "));
+    Serial.print(h);
+    Serial.println(" %");
+    // Muestra la humedad del suelo en el monitor serial
+    Serial.print("Humedad del suelo es: ");
+    Serial.println(ht);
+    
+    // Condiciones para determinar el estado del suelo
+    if (ht > 0 && ht < 1200) {
+        Serial.println("El suelo esta seco.");
+    } else if (ht < 2500 && ht >= 1200) { 
+        Serial.println("El suelo esta humedo.");
+    } else if (ht < 3800 && ht >= 2500) {
+        Serial.println("El suelo esta muy humedo (inundado).");
+    } else {
+        Serial.println("Fallo.");  // Si no cumple ninguna condicion, muestra un fallo
+    }
 
-      /*0 ~300 : dry soil 
-      300~700 : humid soil 
-      700~950: in water */ // base 1024
-      if (ht < 1200) {
-        Serial.println("El suelo está seco (o el sensor presenta fallos)");
-      } else if (ht < 2800 && ht >= 1200) { 
-        Serial.println("El suelo está humedo");
-      } else if (ht < 3800 && ht >= 2800) {
-        Serial.println("El suelo esta practicamente en agua");
-      } else {
-        Serial.println("Fallo");
-      }
-      
-    //mqttPublish( channelID, (String("field1=")+String(WiFi.RSSI())) );
+    // Publicar los valores en el canal de ThingSpeak (field2, field3, field4)
     mqttPublish( channelID, (String("field2=")+String(t) + String("&field3=")+String(h) + String("&field4=")+String(ht) ) );
-    lastPublishMillis = millis();
+    lastPublishMillis = millis(); // Actualizar el tiempo del ultimo mensaje publicado
   }
 }
 
-// Function to connect to WiFi.
+// Funcion para conectar a la red WiFi
 void connectWifi() {
-  Serial.println( "Connecting to Wi-Fi..." );
-  // Loop until WiFi connection is successful
+  Serial.println( "Connecting to Wi-Fi..." ); // Mensaje inicial
+  // Reintentar hasta obtener conexion exitosa
     while ( WiFi.status() != WL_CONNECTED ) {
-    //WiFi.begin( ssid, pass );
-    WiFi.begin(ssid, password);
-    delay( connectionDelay*1000 );
-    Serial.println( WiFi.status() ); 
+    WiFi.begin(ssid, password); // Intentar conectar usando las credenciales definidas
+    delay( connectionDelay*1000 ); // Esperar el tiempo de reintento (delay entre intentos)
+    Serial.println( WiFi.status() ); // Mostrar el estado de la conexion
   }
-  Serial.println( "Connected to Wi-Fi." );
+  Serial.println( "Connected to Wi-Fi." ); // Mensaje cuando la conexion WiFi es exitosa
 }
 
-// Function to connect to MQTT server.
+// Funcion para conectar al servidor MQTT
 void mqttConnect() {
-  // Loop until the client is connected to the server.
+  // Reintentar la conexion al servidor MQTT hasta que sea exitosa
   while ( !mqttClient.connected() ) {
-    // Connect to the MQTT broker.
+    // Intentar conectar con el broker MQTT usando las credenciales definidas
     if ( mqttClient.connect( clientID, mqttUserName, mqttPass ) ) {
       Serial.print( "MQTT to " );
       Serial.print( server );
       Serial.print (" at port ");
       Serial.print( mqttPort );
-      Serial.println( " successful." );
+      Serial.println( " successful." ); // Mostrar exito de la conexion
     } else {
       Serial.print( "MQTT connection failed, rc = " );
-      // See https://pubsubclient.knolleary.net/api.html#state for the failure code explanation.
+      // Mostrar codigo de error en caso de fallo
       Serial.print( mqttClient.state() );
       Serial.println( " Will try the connection again in a few seconds" );
-      delay( connectionDelay*1000 );
+      delay( connectionDelay*1000 ); // Reintentar la conexion despues de un tiempo de espera
     }
   }
 }
 
-// Function to subscribe to ThingSpeak channel for updates.
-void mqttSubscribe( long subChannelID ){
-  String myTopic = "channels/"+String( subChannelID )+"/subscribe";
-  mqttClient.subscribe(myTopic.c_str());
+// Funcion para suscribirse a un canal de ThingSpeak para recibir actualizaciones
+void mqttSubscribe( long subChannelID ) {
+  String myTopic = "channels/"+String( subChannelID )+"/subscribe"; // Crear el topico de suscripcion basado en el canal
+  mqttClient.subscribe(myTopic.c_str()); // Suscribirse al topico
 }
 
-// Function to handle messages from MQTT subscription to the ThingSpeak broker.
+// Funcion para manejar los mensajes de la suscripcion MQTT al broker de ThingSpeak
 void mqttSubscriptionCallback( char* topic, byte* payload, unsigned int length ) {
-  // Print the message details that was received to the serial monitor.
-  Serial.print("Message arrived from ThinksSpeak broker [");
-  Serial.print(topic);
+  // Imprime los detalles del mensaje recibido en el monitor serie
+  Serial.print("Mensaje recibido del broker de ThinksSpeak [");
+  Serial.print(topic);  // Imprime el tema del mensaje
   Serial.print("] ");
+  // Imprime el contenido del mensaje recibido byte por byte
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+    Serial.print((char)payload[i]);  // Convierte cada byte a caracter e imprime
   }
+  // Imprime una nueva linea al final del mensaje
   Serial.println();
 }
 
-// Function to publish messages to a ThingSpeak channel.
+// Funcion para publicar un mensaje en el canal de ThingSpeak
 void mqttPublish(long pubChannelID, String message) {
-  String topicString ="channels/" + String( pubChannelID ) + "/publish";
-  mqttClient.publish( topicString.c_str(), message.c_str() );
+  String topicString ="channels/" + String( pubChannelID ) + "/publish"; // Crear el topico para la publicacion
+  mqttClient.publish( topicString.c_str(), message.c_str() ); // Publicar el mensaje en el topico
 }
