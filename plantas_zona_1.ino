@@ -10,16 +10,15 @@ Edwin Emmanuel Salazar Meza */
 #include <DHT.h>                     // Libreria para el sensor DHT11 (humedad y temperatura)
 #include <PubSubClient.h>            // Libreria para gestionar la conexion MQTT
 
-// Set up the particular type of sensor used (DHT11, DHT21, DHT22, ...) attached to esp32 board.
-#define DHTPIN 14             // Digital esp32 pin to receive data from DHT.
-#define DHTTYPE    DHT11      // DHT 11 is used.
-DHT dht (DHTPIN, DHTTYPE);    // DHT sensor set up.
+// Configurar el tipo particular de sensor utilizado (DHT11, DHT21, DHT22, ...) conectado a la placa esp32.
+#define DHTPIN 14             // Pin digital de esp32 para recibir datos del DHT.
+#define DHTTYPE    DHT11      // Se utiliza el DHT 11.
+DHT dht (DHTPIN, DHTTYPE);    // Configuracion del sensor DHT.
 
-// Variables to hold temperature (t) and humidity (h) readings
+// Variables para almacenar las lecturas de temperatura (t) y humedad (h)
 float t;
 float h;
 
-// Credentials to connect to your WiFi Network.
 // Credenciales para conectarse a la red WiFi
 const char* ssid = ""; 
 const char* password = "";
