@@ -3,7 +3,7 @@
 ## Unidad de formación
 TC1004B. Implementación de internet de las cosas
 
-## Equipo 5
+## Integrantes del equipo
 - Marcos Allen Martínez Cortés
 - Sebastián Hernández Guevara
 - Karol Anette Lozano González
