@@ -167,7 +167,7 @@ void loop() {
       float promedio = (field2_value + field5_value) / 2;
       gravityTds.setTemperature(promedio); // Establecer la temperatura para el sensor TDS
     } else {
-      gravityTds.setTemperature(25); // Si los valores son incorrectos, usar un valor por defecto de 25°C
+      gravityTds.setTemperature(20); // Si los valores son incorrectos, usar un valor por defecto de 20°C
     }
     gravityTds.update(); // Actualizar el sensor de TDS
     calidad = gravityTds.getTdsValue(); // Obtener el valor de calidad del agua en PPM
