@@ -5,7 +5,7 @@ TC1004B. Implementación de internet de las cosas
 
 ## Integrantes del equipo
 - Marcos Allen Martínez Cortés
-- Sebastián Hernández Guevara
+- Sebastián Hernández Guevara ([@SebaApuntoWAV](https://github.com/SebaApuntoWAV))
 - Karol Anette Lozano González
 - Edwin Emmanuel Salazar Meza
 
