@@ -7,7 +7,7 @@ TC1004B. Implementación de internet de las cosas
 - Marcos Allen Martínez Cortés
 - Sebastián Hernández Guevara ([@SebaApuntoWAV](https://github.com/SebaApuntoWAV))
 - Karol Anette Lozano González
-- Edwin Emmanuel Salazar Meza
+- Edwin Emmanuel Salazar Meza ([@EdwinESM](https://github.com/EdwinESM))
 
 ---
 
